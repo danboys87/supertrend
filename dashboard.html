@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Screener Dashboard</title>
+<style>
+:root{color-scheme:light dark;--bg:#fff;--fg:#1a1a1a;--mut:#6b7280;--card:#f6f7f9;--bd:#e3e5e8;--up:#0a8f4d;--dn:#d33;--ac:#2563eb}
+@media(prefers-color-scheme:dark){:root{--bg:#111418;--fg:#e8eaed;--mut:#9aa0a6;--card:#1a1e24;--bd:#2c323a;--up:#3ddc84;--dn:#ff6b6b;--ac:#6ea8ff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin-bottom:12px}
+h1{font-size:18px;margin:0}.mut{color:var(--mut);font-size:13px}
+button{font:inherit;background:var(--ac);color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
+nav{display:flex;gap:4px;border-bottom:1px solid var(--bd);margin-bottom:16px}
+nav a{padding:8px 14px;cursor:pointer;color:var(--mut);border-bottom:2px solid transparent}
+nav a.on{color:var(--fg);border-color:var(--ac);font-weight:600}
+h2{font-size:15px;margin:20px 0 8px}
+.box{overflow-x:auto;border:1px solid var(--bd);border-radius:8px}
+table{border-collapse:collapse;width:100%;min-width:560px}
+th,td{padding:8px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--bd)}
+th{background:var(--card);color:var(--mut);font-weight:600;font-size:12px}tr:last-child td{border-bottom:0}
+.up{color:var(--up)}.dn{color:var(--dn)}.empty{padding:16px;color:var(--mut)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px}
+.stat{background:var(--card);border-radius:8px;padding:10px 12px}.stat b{display:block;font-size:18px}
+.sec{display:none}.sec.on{display:block}
+.ctl{display:flex;gap:8px;margin-bottom:8px}.ctl input,.ctl select{font:inherit;background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:6px 10px}.ctl input{flex:1;min-width:120px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}.modal.on{display:flex}
+.dlg{background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:20px;max-width:380px;width:100%}.dlg h3{margin:0 0 8px;font-size:16px}.dlg p{margin:0 0 16px;line-height:1.7}
+pre{background:var(--card);padding:10px;border-radius:8px;overflow:auto;font-size:12px;max-height:240px}
+</style></head><body><div class="wrap">
+<header><div><h1>Screener UT Bot + Volume SuperTrend</h1><div class="mut" id="meta">memuat...</div></div>
+<button id="scan">Scan sekarang</button></header>
+<nav><a data-t="pos" class="on">Posisi Terbuka</a><a data-t="his">History Trade</a><a data-t="cfg">Konfigurasi</a></nav>
+
+<div class="sec on" id="pos"><h2>Posisi terbuka (paper)</h2><div class="mut" id="mgmt" style="margin:-4px 0 8px"></div><div class="box" id="posT"></div>
+<h2>Filter kondisi pasar</h2><div class="box" id="regBox" style="padding:10px 14px"></div>
+<h2>Kandidat sinyal BUY (scan terakhir)</h2><div class="box" id="candT"></div>
+<h2>Status pair <span class="mut" id="stCount"></span></h2>
+<div class="ctl"><input id="q" placeholder="Cari pair / nama..."><select id="flt"><option value="sig">Hanya bersinyal (BUY/SELL)</option><option value="all">Semua pair yang discan</option><option value="ut">UT trend naik</option><option value="both">UT naik + VST arah bullish</option></select></div>
+<div class="box" id="stT"></div></div>
+
+<div class="sec" id="his"><div class="stats" id="stats"></div><div class="box" id="hisT"></div></div>
+
+<div class="sec" id="cfg"><h2>Konfigurasi aktif</h2><div id="cfgWarn"></div><div class="box" id="cfgT"></div>
+<p class="mut">Ubah lewat file <code>config.json</code> di folder data lalu restart bot. Dashboard hanya menampilkan.</p>
+<h2>Log terbaru</h2><pre id="log"></pre></div></div>
+<div class="modal" id="pop"><div class="dlg"><h3 id="popT"></h3><p id="popB"></p><button id="popOk">OK</button></div></div>
+<script>
+const $=s=>document.querySelector(s);let S=null;
+const esc=v=>String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fT=t=>t?new Date(t).toLocaleString('id-ID',{timeZone:S?.config?.timezone||'Asia/Jakarta',dateStyle:'medium',timeStyle:'short'}):'-';
+const n=(v,d=4)=>v==null||!isFinite(v)?'-':(+v).toLocaleString('en-US',{maximumFractionDigits:d});
+const sg=v=>v>0?'up':v<0?'dn':'';const pc=v=>`<span class="${sg(v)}">${v>0?'+':''}${n(v,2)}%</span>`;
+const tbl=(h,rows)=>rows.length?`<table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</table>`:'<div class="empty">Belum ada data.</div>';
+const yn=v=>v?'<span class="up">ya</span>':'<span class="dn">tidak</span>';
+async function api(p,o={}){const r=await fetch(p,{...o,headers:{'x-token':localStorage.getItem('tok')||''}});
+ if(r.status===401){const t=prompt('Token dashboard:');if(!t)throw new Error('unauthorized');localStorage.setItem('tok',t);return api(p,o)}return r.json()}
+function renderStatus(){
+ const q=$('#q').value.trim().toLowerCase(),f=$('#flt').value;
+ let rows=Object.entries(S.status).map(([k,s])=>({k,...s}));const all=rows.length;
+ rows.sort((a,b)=>(a.rank??1e9)-(b.rank??1e9)||a.k.localeCompare(b.k));
+ rows=rows.filter(s=>(!q||s.k.toLowerCase().includes(q)||(s.name||'').toLowerCase().includes(q))&&(f==='all'||(f==='sig'&&s.signal!=='-')||(f==='ut'&&s.utTrendUp)||(f==='both'&&s.utTrendUp&&s.vstDirBull)));
+ $('#stCount').textContent=`(${rows.length} dari ${all})`;
+ $('#stT').innerHTML=!rows.length&&f==='sig'?`<div class="empty">Tidak ada sinyal pada scan terakhir (${all} pair discan).</div>`:tbl(['#','Pair','Candle (waktu buka)','Harga','UT trend naik','VST arah bullish','VST warna hijau','Sinyal'],rows.map(s=>[s.rank??'-',`<b>${esc(s.k)}</b>`,fT(s.time),n(s.price),yn(s.utTrendUp),yn(s.vstDirBull),yn(s.vstColorBull),s.signal==='-'?'-':`<b class="${s.signal==='BUY'?'up':'dn'}">${s.signal}</b>`+(s.stale?` <span class="mut">(lewat ${s.ageMin} mnt, tidak dibuka)</span>`:'')]))}
+function popup(){
+ if(!S||!S.lastScan||String(S.lastScan)===localStorage.getItem('seenScan'))return;localStorage.setItem('seenScan',S.lastScan);
+ const sg=Object.entries(S.status).filter(([,s])=>s.signal!=='-'),tot=S.scanInfo?S.scanInfo.pairs:Object.keys(S.status).length;
+ $('#popT').textContent='Scan selesai: '+fT(S.lastScan);
+ $('#popB').innerHTML=sg.length?`Ada <b>${sg.length}</b> sinyal:<br>`+sg.map(([k,s])=>`<b class="${s.signal==='BUY'?'up':'dn'}">${s.signal}</b> ${esc(k)} @ ${n(s.price)}${s.stale?' <span class="mut">(sudah lewat, tidak dibuka)</span>':''}`).join('<br>'):`Tidak ada sinyal BUY/SELL.<br><span class="mut">${tot} pair discan.</span>`;
+ if(S.regime&&S.regime.enabled)$('#popB').innerHTML+=`<br><span class="mut">Filter pasar: ${S.regime.ok?'entry diizinkan':'entry ditahan'}</span>`;
+ $('#pop').classList.add('on')}
+function render(){
+ const f=S.config.feePct/100;
+ const TR=S.config.management?.trailing;
+ $('#posT').innerHTML=tbl(['Pair','Masuk','Harga entry','Harga terakhir','PnL %','PnL USDT','Stop loss','Trailing','Ukuran'],S.positions.map(p=>{
+  const px=p.lastPrice??S.status[p.pair]?.price,r=px?(px/p.entryPrice)*(1-f)*(1-f)-1:null,pk=p.peak?(p.peak/p.entryPrice-1)*100:0;
+  const tr=!TR||!TR.enabled?'<span class="mut">nonaktif</span>':p.trailActive?`<b class="up">aktif</b> <span class="mut">(puncak ${pc(pk)})</span>`:`<span class="mut">menunggu +${TR.activateProfitPct}% (puncak ${n(pk,1)}%)</span>`;
+  return [`<b>${esc(p.pair)}</b>`,fT(p.entryTime),n(p.entryPrice),n(px),r==null?'-':pc(r*100),r==null?'-':`<span class="${sg(r)}">${n(p.sizeUsdt*r,2)}</span>`,n(p.stopLoss)+(p.trailActive?' <span class="mut">(dikunci)</span>':''),tr,n(p.sizeUsdt,0)+' USDT']}));
+ const lc=Math.max(0,...S.positions.map(p=>p.lastCheck||0));$('#mgmt').textContent=S.positions.length&&lc?`Posisi dicek terakhir: ${fT(lc)} (tiap ${S.config.management?.intervalSec||60} detik)`:'';
+ renderStatus();
+ const rg=S.regime;
+ $('#regBox').innerHTML=!rg?'<span class="mut">Belum ada data.</span>':!rg.enabled?'Filter kondisi pasar: <b>OFF</b> <span class="mut">(entry tidak dibatasi kondisi BTC)</span>':rg.error?`<b class="dn">Entry ditahan</b> <span class="mut">(filter gagal dihitung: ${esc(rg.error)})</span>`
+  :`${esc(rg.ref)} (${esc(rg.mode)}): <b class="${rg.ok?'up':'dn'}">${rg.ok?'entry diizinkan':'entry ditahan'}</b> <span class="mut">— ${rg.mode==='sma200'?`harga ${n(rg.price)} ${rg.ok?'di atas':'di bawah'} SMA200 ${n(rg.sma200)}`:`UT naik: ${rg.utUp?'ya':'tidak'}${rg.mode==='utvst'?`, VST bullish: ${rg.vstBull?'ya':'tidak'}`:''}`}</span>`;
+ const cd=S.candidates&&S.candidates.list||[];
+ $('#candT').innerHTML=tbl(['Urut','Pair','Peringkat','Skor','Lonjakan volume','Risiko (ATR/harga)','Volume 24j (USDT)','Hasil'],cd.map((c,i)=>[i+1,`<b>${esc(c.pair)}</b>`,c.rank??'-',c.score??'-',c.surge!=null?n(c.surge,1)+'x':'-',c.risk!=null?n(c.risk*100,1)+'%':'-',n(c.vol24,0),`<b class="${c.result==='Dibuka'?'up':'mut'}">${esc(c.result)}</b>`]));
+ const T=S.trades,w=T.filter(t=>t.pnlPct>0),gp=w.reduce((a,t)=>a+t.pnlUsdt,0),gl=Math.abs(T.filter(t=>t.pnlPct<=0).reduce((a,t)=>a+t.pnlUsdt,0)),tot=T.reduce((a,t)=>a+t.pnlUsdt,0);
+ $('#stats').innerHTML=[['Total trade',T.length],['Win rate',T.length?n(w.length/T.length*100,1)+'%':'-'],['Total PnL',`<span class="${sg(tot)}">${n(tot,2)} USDT</span>`],['Profit factor',gl?n(gp/gl,2):(gp?'∞':'-')]].map(([a,b])=>`<div class="stat"><span class="mut">${a}</span><b>${b}</b></div>`).join('');
+ $('#hisT').innerHTML=tbl(['Pair','Masuk','Keluar','Harga entry','Harga keluar','Alasan','PnL %','PnL USDT'],T.map(t=>[`<b>${esc(t.pair)}</b>`,fT(t.entryTime),fT(t.exitTime),n(t.entryPrice),n(t.exitPrice),esc(t.reason),pc(t.pnlPct),`<span class="${sg(t.pnlUsdt)}">${n(t.pnlUsdt,2)}</span>`]));
+ $('#log').textContent=S.log.map(l=>fT(l.t)+'  '+l.m).join('\n')||'-';
+ try{
+ const c=S.config,s=c.strategy,rows=[['Pair manual (selalu discan)',c.pairs.join(', ')],['Universe',c.universe.mode==='coingecko'?`CoinGecko top ${c.universe.topN}, stablecoin ${c.universe.excludeStable?'dibuang':'ikut'}, wrapped/staked ${c.universe.excludeWrapped?'dibuang':'ikut'}`:'manual (hanya daftar pair)'],
+  ['Pair yang discan',S.scanInfo?`${S.scanInfo.pairs} (ok ${S.scanInfo.ok}, dilewati ${S.scanInfo.skip}, error ${S.scanInfo.errors}), ${S.scanInfo.seconds} dtk`:'-'],['Daftar koin diperbarui',S.universe?fT(S.universe.updated):'-'],['Timeframe','4H'],['Jadwal scan',`tiap close candle 4H + ${c.delaySec} detik`],['Ukuran posisi (paper)',c.positionSizeUsdt+' USDT'],['Fee per sisi',c.feePct+'%'],['Maks posisi terbuka',c.maxOpenPositions],
+  ['UT Bot',s.utBot.enabled?`ON, key ${s.utBot.key}, ATR ${s.utBot.atr}`:'OFF'],['Volume ST',`len ${s.vst.len}, factor ${s.vst.factor}, WMA ${s.vst.priceLen}/${s.vst.stLen}, KNN k${s.vst.k} n${s.vst.n}`],
+  ['VST syarat buy: arah bullish',s.vst.requireDirection?'ON':'OFF'],['VST syarat buy: warna hijau',s.vst.requireColor?'ON':'OFF'],['Entry window',s.entryWindow+' candle'],
+  ['Exit: UT sell',s.exit.onUTSell?(s.exit.utKey==null?'ON (key entry)':'ON, trailing key '+s.exit.utKey):'OFF'],['Exit: VST tidak OK',s.exit.onVSTBad?'ON':'OFF'],
+  ['Filter kondisi pasar',c.regime&&c.regime.enabled?`ON, acuan ${c.regime.ref}, mode ${c.regime.mode}`:'OFF'],['Ranking kandidat',c.ranking&&c.ranking.enabled?(c.ranking.by==='score'?'ON, skor gabungan (lonjakan volume + risiko rendah)':'ON, peringkat market cap'):'OFF (urut peringkat market cap)'],
+  ['Sumber konfigurasi',S.configInfo?esc(S.configInfo.source):'-'],
+  ['Manajemen posisi',c.management&&c.management.enabled?`ON, cek tiap ${c.management.intervalSec} detik`:'OFF'],['Trailing stop',c.management&&c.management.enabled&&c.management.trailing.enabled?`aktif saat profit +${c.management.trailing.activateProfitPct}%, lalu stop loss naik ke entry +${c.management.trailing.lockProfitPct}%`+(c.management.trailing.trailDistancePct!=null?`, lalu mengikuti puncak (jarak ${c.management.trailing.trailDistancePct}%)`:''):'OFF'],
+  ['Stop loss awal',!s.stopLoss?'(strategy.js versi lama, perlu diganti)':s.stopLoss.mode==='atr'?`ATR x ${s.stopLoss.atrMult}`:s.stopLoss.mode==='percent'?s.stopLoss.percent+'%':'OFF']];
+ $('#cfgT').innerHTML=tbl(['Parameter','Nilai'],rows);
+ const cw=(S.configInfo&&S.configInfo.warnings)||[];$('#cfgWarn').innerHTML=cw.length?`<div class="box" style="padding:10px 14px;margin-bottom:12px"><b class="dn">Peringatan konfigurasi</b><br>${cw.map(w=>'<span class="mut">'+esc(w)+'</span>').join('<br>')}</div>`:'';
+ }catch(e){$('#cfgT').innerHTML='<div class="empty">Gagal menampilkan konfigurasi: '+esc(e.message)+'. Pastikan screener.js dan strategy.js adalah versi terbaru.</div>'}
+ tick()}
+function tick(){if(!S)return;const d=S.nextScan?Math.max(0,Math.round((S.nextScan-Date.now())/1000)):0,h=Math.floor(d/3600),m=Math.floor(d%3600/60),s=d%60;
+ $('#meta').textContent=`Scan terakhir: ${fT(S.lastScan)} | Scan berikutnya: ${fT(S.nextScan)} (${h}j ${m}m ${s}d lagi)`}
+async function load(){try{S=await api('/api/state');render();popup()}catch(e){$('#meta').textContent='Gagal memuat: '+e.message}}
+document.querySelectorAll('nav a').forEach(a=>a.onclick=()=>{document.querySelectorAll('nav a,.sec').forEach(x=>x.classList.remove('on'));a.classList.add('on');$('#'+a.dataset.t).classList.add('on')});
+$('#popOk').onclick=()=>$('#pop').classList.remove('on');$('#pop').onclick=e=>{if(e.target.id==='pop')$('#pop').classList.remove('on')};
+$('#q').oninput=$('#flt').onchange=()=>S&&renderStatus();
+$('#scan').onclick=async()=>{$('#scan').disabled=true;await api('/api/scan',{method:'POST'});setTimeout(()=>{load();$('#scan').disabled=false},4000)};
+load();setInterval(load,15000);setInterval(tick,1000);
+</script></body></html>

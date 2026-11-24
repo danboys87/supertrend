@@ -1,0 +1,9 @@
+{
+  "name": "vst-ut-screener",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Screener UT Bot + Volume SuperTrend (4H) dengan dashboard",
+  "main": "screener.js",
+  "scripts": { "start": "node screener.js", "backtest": "node backtest.js", "portfolio": "node portfolio.js", "futures": "node futures_backtest.js" },
+  "engines": { "node": ">=18" }
+}

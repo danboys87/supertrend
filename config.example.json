@@ -1,0 +1,18 @@
+{
+  "pairs": ["HYPE-USDT"],
+  "universe": { "mode": "coingecko", "topN": 150, "excludeStable": true, "excludeWrapped": true, "refreshHours": 24 },
+  "delaySec": 30,
+  "positionSizeUsdt": 100,
+  "feePct": 0.1,
+  "maxOpenPositions": 3,
+  "timezone": "Asia/Jakarta",
+  "management": {
+    "enabled": true,
+    "intervalSec": 60,
+    "trailing": { "enabled": true, "activateProfitPct": 15, "lockProfitPct": 1, "trailDistancePct": null }
+  },
+  "regime": { "enabled": true, "mode": "utvst", "ref": "BTC-USDT" },
+  "ranking": { "enabled": true, "by": "score", "minVolume24hUsdt": 0 },
+  "maxSignalAgeMin": 10,
+  "strategy": {}
+}
