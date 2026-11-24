@@ -46,7 +46,7 @@ const DEFAULTS = {
   },
   regime: {                  // filter kondisi pasar: entry BARU hanya boleh kalau kondisi acuan (BTC) OK
     enabled: true,           // ON/OFF
-    mode: 'sma200',          // 'sma200' = BTC di atas rata-rata 200 candle 4H | 'utvst' = UT Bot BTC naik DAN Volume ST BTC bullish | 'ut2' = UT Bot BTC naik
+    mode: 'utvst',          // 'sma200' = BTC di atas rata-rata 200 candle 4H | 'utvst' = UT Bot BTC naik DAN Volume ST BTC bullish | 'ut2' = UT Bot BTC naik
     ref: 'BTC-USDT',
   },
   ranking: {                 // kalau sinyal BUY lebih banyak dari slot kosong
