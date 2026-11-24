@@ -31,7 +31,7 @@ const DEFAULTS = {
     refreshHours: 24,        // seberapa sering daftar koin diperbarui dari CoinGecko
   },
   delaySec: 30,              // jeda setelah close candle
-  positionSizeUsdt: 100,     // ukuran posisi virtual per trade
+  positionSizeUsdt: 50,     // ukuran posisi virtual per trade
   feePct: 0.1,               // fee per sisi (%)
   maxOpenPositions: 3,
   management: {              // manajemen posisi terbuka, jalan terpisah dari scan 4H
