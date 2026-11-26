@@ -22,6 +22,7 @@ th{background:var(--card);color:var(--mut);font-weight:600;font-size:12px}tr:las
 .stat{background:var(--card);border-radius:8px;padding:10px 12px}.stat b{display:block;font-size:18px}
 .sec{display:none}.sec.on{display:block}
 .ctl{display:flex;gap:8px;margin-bottom:8px}.ctl input,.ctl select{font:inherit;background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:6px 10px}.ctl input{flex:1;min-width:120px}
+.buy{padding:3px 10px;font-size:12px}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}.modal.on{display:flex}
 .dlg{background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:20px;max-width:380px;width:100%}.dlg h3{margin:0 0 8px;font-size:16px}.dlg p{margin:0 0 16px;line-height:1.7}
 pre{background:var(--card);padding:10px;border-radius:8px;overflow:auto;font-size:12px;max-height:240px}
@@ -80,7 +81,7 @@ function render(){
  $('#regBox').innerHTML=!rg?'<span class="mut">Belum ada data.</span>':!rg.enabled?'Filter kondisi pasar: <b>OFF</b> <span class="mut">(entry tidak dibatasi kondisi BTC)</span>':rg.error?`<b class="dn">Entry ditahan</b> <span class="mut">(filter gagal dihitung: ${esc(rg.error)})</span>`
   :`${esc(rg.ref)} (${esc(rg.mode)}): <b class="${rg.ok?'up':'dn'}">${rg.ok?'entry diizinkan':'entry ditahan'}</b> <span class="mut">— ${rg.mode==='sma200'?`harga ${n(rg.price)} ${rg.ok?'di atas':'di bawah'} SMA200 ${n(rg.sma200)}`:`UT naik: ${rg.utUp?'ya':'tidak'}${rg.mode==='utvst'?`, VST bullish: ${rg.vstBull?'ya':'tidak'}`:''}`}</span>`;
  const cd=S.candidates&&S.candidates.list||[];
- $('#candT').innerHTML=tbl(['Urut','Pair','Peringkat','Skor','Lonjakan volume','Risiko (ATR/harga)','Volume 24j (USDT)','Hasil'],cd.map((c,i)=>[i+1,`<b>${esc(c.pair)}</b>`,c.rank??'-',c.score??'-',c.surge!=null?n(c.surge,1)+'x':'-',c.risk!=null?n(c.risk*100,1)+'%':'-',n(c.vol24,0),`<b class="${c.result==='Dibuka'?'up':'mut'}">${esc(c.result)}</b>`]));
+ $('#candT').innerHTML=tbl(['Urut','Pair','Peringkat','Skor','Lonjakan volume','Risiko (ATR/harga)','Volume 24j (USDT)','Hasil','Aksi'],cd.map((c,i)=>[i+1,`<b>${esc(c.pair)}</b>`,c.rank??'-',c.score??'-',c.surge!=null?n(c.surge,1)+'x':'-',c.risk!=null?n(c.risk*100,1)+'%':'-',n(c.vol24,0),`<b class="${c.result.startsWith('Dibuka')?'up':'mut'}">${esc(c.result)}</b>`,c.result.startsWith('Dibuka')?'-':`<button class="buy" data-p="${esc(c.pair)}" data-r="${esc(c.result)}">Buy manual</button>`]));
  const T=S.trades,w=T.filter(t=>t.pnlPct>0),gp=w.reduce((a,t)=>a+t.pnlUsdt,0),gl=Math.abs(T.filter(t=>t.pnlPct<=0).reduce((a,t)=>a+t.pnlUsdt,0)),tot=T.reduce((a,t)=>a+t.pnlUsdt,0);
  $('#stats').innerHTML=[['Total trade',T.length],['Win rate',T.length?n(w.length/T.length*100,1)+'%':'-'],['Total PnL',`<span class="${sg(tot)}">${n(tot,2)} USDT</span>`],['Profit factor',gl?n(gp/gl,2):(gp?'∞':'-')]].map(([a,b])=>`<div class="stat"><span class="mut">${a}</span><b>${b}</b></div>`).join('');
  $('#hisT').innerHTML=tbl(['Pair','Masuk','Keluar','Harga entry','Harga keluar','Alasan','PnL %','PnL USDT'],T.map(t=>[`<b>${esc(t.pair)}</b>`,fT(t.entryTime),fT(t.exitTime),n(t.entryPrice),n(t.exitPrice),esc(t.reason),pc(t.pnlPct),`<span class="${sg(t.pnlUsdt)}">${n(t.pnlUsdt,2)}</span>`]));
@@ -103,6 +104,10 @@ function tick(){if(!S)return;const d=S.nextScan?Math.max(0,Math.round((S.nextSca
  $('#meta').textContent=`Scan terakhir: ${fT(S.lastScan)} | Scan berikutnya: ${fT(S.nextScan)} (${h}j ${m}m ${s}d lagi)`}
 async function load(){try{S=await api('/api/state');render();popup()}catch(e){$('#meta').textContent='Gagal memuat: '+e.message}}
 document.querySelectorAll('nav a').forEach(a=>a.onclick=()=>{document.querySelectorAll('nav a,.sec').forEach(x=>x.classList.remove('on'));a.classList.add('on');$('#'+a.dataset.t).classList.add('on')});
+$('#candT').onclick=async e=>{const b=e.target.closest('button.buy');if(!b)return;const pair=b.dataset.p,res=b.dataset.r;
+ const warn=res==='Ditahan filter pasar'?'\n\nPERHATIAN: filter pasar sedang MENAHAN entry. Di backtest, entry tanpa filter cenderung rugi.':res==='Tidak kebagian slot'?'\n\nCatatan: slot posisi mungkin penuh.':'';
+ if(!confirm(`Buka posisi PAPER ${pair}?\nUkuran ${S.config.positionSizeUsdt} USDT, harga = harga terakhir saat ini.\nTidak ada order ke exchange.${warn}`))return;
+ b.disabled=true;try{const r=await api('/api/buy',{method:'POST',body:JSON.stringify({pair})});alert(r.message)}catch(err){alert('Gagal: '+err.message)}load()};
 $('#popOk').onclick=()=>$('#pop').classList.remove('on');$('#pop').onclick=e=>{if(e.target.id==='pop')$('#pop').classList.remove('on')};
 $('#q').oninput=$('#flt').onchange=()=>S&&renderStatus();
 $('#scan').onclick=async()=>{$('#scan').disabled=true;await api('/api/scan',{method:'POST'});setTimeout(()=>{load();$('#scan').disabled=false},4000)};

@@ -31,7 +31,7 @@ const DEFAULTS = {
     refreshHours: 24,        // seberapa sering daftar koin diperbarui dari CoinGecko
   },
   delaySec: 30,              // jeda setelah close candle
-  positionSizeUsdt: 50,     // ukuran posisi virtual per trade
+  positionSizeUsdt: 100,     // ukuran posisi virtual per trade
   feePct: 0.1,               // fee per sisi (%)
   maxOpenPositions: 3,
   management: {              // manajemen posisi terbuka, jalan terpisah dari scan 4H
@@ -45,8 +45,8 @@ const DEFAULTS = {
     },
   },
   regime: {                  // filter kondisi pasar: entry BARU hanya boleh kalau kondisi acuan (BTC) OK
-    enabled: false,           // ON/OFF
-    mode: 'utvst',          // 'sma200' = BTC di atas rata-rata 200 candle 4H | 'utvst' = UT Bot BTC naik DAN Volume ST BTC bullish | 'ut2' = UT Bot BTC naik
+    enabled: true,           // ON/OFF
+    mode: 'sma200',          // 'sma200' = BTC di atas rata-rata 200 candle 4H | 'utvst' = UT Bot BTC naik DAN Volume ST BTC bullish | 'ut2' = UT Bot BTC naik
     ref: 'BTC-USDT',
   },
   ranking: {                 // kalau sinyal BUY lebih banyak dari slot kosong
@@ -285,7 +285,7 @@ function openPosition(c) {
 function processCandidates() {
   const list = candidates.splice(0), R = state.regime || { ok: true }, out = [];
   const minVol = config.ranking.minVolume24hUsdt || 0, pool = [];
-  const pub = (c, result) => ({ pair: c.meta.pair, rank: c.meta.rank, price: c.price, surge: c.surge, risk: c.risk, vol24: c.vol24, score: c.score ?? null, result });
+  const pub = (c, result) => ({ pair: c.meta.pair, rank: c.meta.rank, price: c.price, surge: c.surge, risk: c.risk, vol24: c.vol24, atr: c.atr, score: c.score ?? null, result });
   for (const c of list) {
     if (!R.ok) out.push(pub(c, 'Ditahan filter pasar'));
     else if (c.vol24 < minVol) out.push(pub(c, 'Volume 24 jam kecil'));
@@ -340,6 +340,44 @@ function scheduleNext() {
   setTimeout(async () => { await scanAll(); scheduleNext(); }, t - now);
 }
 
+// ───────── Buy manual dari dashboard (PAPER: hanya mencatat posisi virtual, tidak mengirim order ke exchange) ─────────
+async function fetchTicker(instId) {
+  if (global.__mockTicker) return global.__mockTicker(instId); // hook untuk tes
+  for (let a = 0; ; a++) {
+    try {
+      const j = await (await fetch(`https://www.okx.com/api/v5/market/ticker?instId=${instId}`)).json();
+      const last = j.code === '0' && j.data && j.data[0] ? +j.data[0].last : NaN;
+      if (!(last > 0)) throw new Error(j.msg || 'harga tidak tersedia');
+      return last;
+    } catch (e) { if (a >= 1) throw e; await sleep(600); }
+  }
+}
+async function manualBuy(pair) {
+  if (scanning) return { ok: false, message: 'Scan sedang berjalan, coba lagi beberapa detik lagi.' };
+  const c = ((state.candidates && state.candidates.list) || []).find((x) => x.pair === pair);
+  if (!c) return { ok: false, message: `${pair} bukan kandidat dari scan terakhir.` };
+  if (state.positions.some((p) => p.pair === pair)) return { ok: false, message: `Posisi ${pair} sudah terbuka.` };
+  if (state.positions.length >= config.maxOpenPositions) return { ok: false, message: `Posisi penuh (${state.positions.length}/${config.maxOpenPositions}). Tutup posisi atau naikkan maxOpenPositions di config.` };
+  const price = await fetchTicker(pair); // harga terakhir saat ini, bukan harga close candle sinyal yang mungkin sudah lama
+  const sl = stopLossPrice(price, c.atr, config.strategy);
+  if (mergeConfig(config.strategy).stopLoss.mode === 'atr' && !Number.isFinite(sl)) {
+    return { ok: false, message: 'Data kandidat belum lengkap (ATR). Tekan "Scan sekarang" lalu coba lagi.' };
+  }
+  if (Number.isFinite(sl) && sl <= 0) return { ok: false, message: 'Stop loss tidak valid (ATR terlalu besar dibanding harga).' };
+  const now = Date.now();
+  state.positions.push({
+    pair, entryPrice: price, entryTime: now, stopLoss: Number.isFinite(sl) ? sl : null, sizeUsdt: config.positionSizeUsdt, manual: true,
+    peak: price, trailActive: false, slSince: now, checkedUntil: Math.ceil(now / 60000) * 60000, lastPrice: price, lastCheck: now,
+  });
+  c.result = 'Dibuka (manual)';
+  const msg = `BUY MANUAL ${pair} @ ${price} | SL ${Number.isFinite(sl) ? sl.toFixed(4) : '-'}`;
+  log(msg);
+  notify(`🟢 ${msg}\nUkuran ${config.positionSizeUsdt} USDT (paper)`);
+  save();
+  return { ok: true, message: `${msg}\nUkuran ${config.positionSizeUsdt} USDT (paper, tidak ada order ke exchange).` };
+}
+const readBody = (req) => new Promise((resolve) => { let b = ''; req.on('data', (d) => { b += d; if (b.length > 1e5) req.destroy(); }); req.on('end', () => resolve(b)); });
+
 function startServer() {
   const ok = (req) => !process.env.DASHBOARD_TOKEN || req.headers['x-token'] === process.env.DASHBOARD_TOKEN;
   const send = (res, code, body, type = 'application/json') => { res.writeHead(code, { 'content-type': type }); res.end(typeof body === 'string' ? body : JSON.stringify(body)); };
@@ -355,6 +393,14 @@ function startServer() {
         });
       }
       if (u === '/api/scan' && req.method === 'POST') { scanAll(); return send(res, 200, { ok: true }); }
+      if (u === '/api/buy' && req.method === 'POST') {
+        readBody(req).then(async (b) => {
+          let pair;
+          try { pair = JSON.parse(b || '{}').pair; } catch { return send(res, 400, { ok: false, message: 'Body bukan JSON.' }); }
+          try { send(res, 200, await manualBuy(String(pair || ''))); } catch (e) { send(res, 200, { ok: false, message: `Gagal: ${e.message}` }); }
+        });
+        return;
+      }
     }
     send(res, 404, 'not found', 'text/plain');
   }).listen(process.env.PORT || 3000, () => log(`Dashboard di port ${process.env.PORT || 3000}`));
@@ -367,4 +413,4 @@ if (require.main === module) {
   scanAll().then(scheduleNext);
   if (config.management.enabled) setInterval(managePositions, Math.max(10, config.management.intervalSec) * 1000);
 }
-module.exports = { scanPair, scanAll, resolvePairs, managePositions, computeRegime, processCandidates, rankCandidates, candidates, state, config };
+module.exports = { manualBuy, scanPair, scanAll, resolvePairs, managePositions, computeRegime, processCandidates, rankCandidates, candidates, state, config };
