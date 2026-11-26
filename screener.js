@@ -31,7 +31,7 @@ const DEFAULTS = {
     refreshHours: 24,        // seberapa sering daftar koin diperbarui dari CoinGecko
   },
   delaySec: 30,              // jeda setelah close candle
-  positionSizeUsdt: 100,     // ukuran posisi virtual per trade
+  positionSizeUsdt: 50,     // ukuran posisi virtual per trade
   feePct: 0.1,               // fee per sisi (%)
   maxOpenPositions: 3,
   management: {              // manajemen posisi terbuka, jalan terpisah dari scan 4H
@@ -46,7 +46,7 @@ const DEFAULTS = {
   },
   regime: {                  // filter kondisi pasar: entry BARU hanya boleh kalau kondisi acuan (BTC) OK
     enabled: true,           // ON/OFF
-    mode: 'sma200',          // 'sma200' = BTC di atas rata-rata 200 candle 4H | 'utvst' = UT Bot BTC naik DAN Volume ST BTC bullish | 'ut2' = UT Bot BTC naik
+    mode: 'utvst',          // 'sma200' = BTC di atas rata-rata 200 candle 4H | 'utvst' = UT Bot BTC naik DAN Volume ST BTC bullish | 'ut2' = UT Bot BTC naik
     ref: 'BTC-USDT',
   },
   ranking: {                 // kalau sinyal BUY lebih banyak dari slot kosong
