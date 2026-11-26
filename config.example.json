@@ -11,7 +11,7 @@
     "intervalSec": 60,
     "trailing": { "enabled": true, "activateProfitPct": 15, "lockProfitPct": 1, "trailDistancePct": null }
   },
-  "regime": { "enabled": true, "mode": "utvst", "ref": "BTC-USDT" },
+  "regime": { "enabled": false, "mode": "utvst", "ref": "BTC-USDT" },
   "ranking": { "enabled": true, "by": "score", "minVolume24hUsdt": 0 },
   "maxSignalAgeMin": 10,
   "strategy": {}
